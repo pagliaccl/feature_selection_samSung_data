@@ -1,0 +1,65 @@
+---
+title: "Try4_with_stepAIC_RF_Plot"
+author: "Linxiao Bai"
+date: "2/11/2017"
+output: html_document
+---
+###Loading Packages
+```{r results='hide', message=FALSE, warning=FALSE}
+library(nnet)
+library(MASS)
+library(randomForest)
+```
+###Loading data with all r data as training, and test from python
+```{r}
+load('/Users/Pagliacci/Desktop/DSC450/samsungData.rda')
+colnames(samsungData) = make.names(names(samsungData), unique = TRUE)
+samsungData$activity=as.factor(samsungData$activity)
+
+new_test = read.csv('/Users/Pagliacci/Desktop/DSC450/X_test.csv',header=FALSE)
+names(new_test) = names(samsungData)[1:561]
+
+new_test_y=read.csv('/Users/Pagliacci/Desktop/DSC450/y_test.csv', header = FALSE)
+new_test_y[new_test_y == 1] = 'walk'
+new_test_y[new_test_y == 2] = 'walkup'
+new_test_y[new_test_y == 3] = 'walkdown'
+new_test_y[new_test_y == 4] = 'sitting'
+new_test_y[new_test_y == 5] = 'standing'
+new_test_y[new_test_y == 6] = 'laying'
+new_test$activity=as.factor(new_test_y$V1)
+
+train=samsungData
+test=new_test
+
+```
+###Forward AIC selection with Multinomial Logistic
+```{r results='hide', message=FALSE, warning=FALSE}
+fml_full=formula(paste("activity~",paste(colnames(train)[1:ncol(train)-1],collapse="+")))
+step_result=step(multinom(activity~1,data=train,trace=0),
+                 scope=fml_full,direction='forward',steps=7,trace=FALSE)
+```
+###Plot AIC decrease trend against the number of predictors.
+```{r}
+plot(x=0:7,y=step_result$anova$AIC,type = "b",xlab = "Number of Predictors", ylab="AIC",main="Forward Selection AIC")
+```
+###Test performance on test data according to the number of predictors
+```{r}
+accuracy=list()
+for(i in 2:8){
+  fml=formula(paste("activity~",paste(step_result$coefnames[2:i],collapse="+")))
+  rfmdl=randomForest(fml,data=train,trace=0)
+  accuracy=c(accuracy,mean(predict(rfmdl,newdata=test)==test$activity))
+}
+
+data.frame("Step"=step_result$anova$Step[2:8],"accuracy"=unlist(accuracy))
+plot(x=1:7,y=unlist(accuracy),type="b",ylab="Test Accuracy",xlab="Number of Predictors")
+```
+###The AIC curve shows significant decrease of AIC before 4 predictors, might be a good idea to choose 4, where we have over 80% accuracy, and also not too many predictors. The follwing result gives detail about the goodness of fit of our final model.
+```{r}
+RFfml4=formula(paste("activity~",paste(step_result$coefnames[2:5], collapse ="+")))
+RFfml4
+RFmdl4=randomForest(RFfml4,data=train)
+table(predict(RFmdl4,newdata=test),test$activity)
+mean(predict(RFmdl4,newdata=test)==test$activity)
+```
+
